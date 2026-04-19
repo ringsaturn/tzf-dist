@@ -36,6 +36,7 @@ jobs:
           fi
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "TBB_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Check if data branch is already current
         id: check-update
