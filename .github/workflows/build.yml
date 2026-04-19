@@ -31,7 +31,7 @@ jobs:
           go-version-file: go.mod
 
       - name: Fetch latest timezone-boundary-builder version
-        id: tbb-version
+        id: fetch-version
         run: |
           VERSION=$(curl -sf "https://api.github.com/repos/evansiroky/timezone-boundary-builder/tags" \
             | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['name'] if d else '')")
@@ -39,8 +39,7 @@ jobs:
             echo "Failed to fetch latest TBB version"
             exit 1
           fi
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "TBB_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Check if data branch is already current
@@ -48,19 +47,18 @@ jobs:
         run: |
           git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
           CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
-          TBB="${{ steps.tbb-version.outputs.version }}"
-          if [ "$TBB" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
-            echo "Already up to date: $TBB"
+          if [ "$TIMEZONE_BOUNDARY_VERSION" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Already up to date: $TIMEZONE_BOUNDARY_VERSION"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           else
-            echo "Update needed: '$CURRENT' -> '$TBB' (force=${{ inputs.force }})"
+            echo "Update needed: '$CURRENT' -> '$TIMEZONE_BOUNDARY_VERSION' (force=${{ inputs.force }})"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Download timezone boundary data
         if: steps.check-update.outputs.should_continue == 'true'
         run: |
-          wget "https://github.com/evansiroky/timezone-boundary-builder/releases/download/$TBB_VERSION/timezones-with-oceans.geojson.zip"
+          wget "https://github.com/evansiroky/timezone-boundary-builder/releases/download/$TIMEZONE_BOUNDARY_VERSION/timezones-with-oceans.geojson.zip"
           unzip timezones-with-oceans.geojson.zip
 
       - name: Install CLI tools
@@ -115,7 +113,7 @@ jobs:
         if: steps.check-update.outputs.should_continue == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: tzpb-${{ steps.tbb-version.outputs.version }}
+          name: tzpb-${{ steps.fetch-version.outputs.TIMEZONE_BOUNDARY_VERSION }}
           path: |
             combined-with-oceans.compress.topo.bin
             combined-with-oceans.topology.compress.topo.bin
@@ -143,8 +141,7 @@ jobs:
           cp /tmp/tzf-dist-go.mod go.mod
           cp /tmp/tzf-dist-gitattributes .gitattributes
 
-          # Record the TBB version this data was built from
-          echo "$TBB_VERSION" > VERSION
+          echo "$TIMEZONE_BOUNDARY_VERSION" > VERSION
 
           git add embed.go go.mod .gitattributes VERSION
           git add combined-with-oceans.compress.topo.bin
@@ -152,7 +149,7 @@ jobs:
           git add combined-with-oceans.reduce.preindex.bin
           git add STATS.md checksums.md5
 
-          git commit -m "data: $TBB_VERSION"
+          git commit -m "data: $TIMEZONE_BOUNDARY_VERSION"
 
           # Force push as data branch (no history retained; historical data via tags)
           git push origin HEAD:data --force

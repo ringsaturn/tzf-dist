@@ -63,7 +63,7 @@ def main():
     lines = [
         "# Build Statistics",
         "",
-        f"**Timezone Boundary Builder version:** {os.environ['TBB_VERSION']}",
+        f"**Timezone Boundary Builder version:** {os.environ['TIMEZONE_BOUNDARY_VERSION']}",
         f"**Build date:** {os.environ['BUILD_DATE']}",
         "",
         "## Output Files",
