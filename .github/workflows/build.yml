@@ -4,6 +4,11 @@ on:
   schedule:
     - cron: "0 3 * * *"
   workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even if data branch is already current"
+        type: boolean
+        default: false
 
 env:
   # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
@@ -44,11 +49,11 @@ jobs:
           git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
           CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
           TBB="${{ steps.tbb-version.outputs.version }}"
-          if [ "$TBB" = "$CURRENT" ]; then
+          if [ "$TBB" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
             echo "Already up to date: $TBB"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           else
-            echo "Update needed: '$CURRENT' -> '$TBB'"
+            echo "Update needed: '$CURRENT' -> '$TBB' (force=${{ inputs.force }})"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           fi
 
