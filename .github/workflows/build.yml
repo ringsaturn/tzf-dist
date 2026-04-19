@@ -73,17 +73,106 @@ jobs:
           geojson2tzpb combined-with-oceans.json
 
           # combined-with-oceans.compress.topo.bin: dedup + compress on full precision data
-          deduplicatetzpb -o combined-with-oceans.topo.bin combined-with-oceans.bin
-          compresstopotzpb -o combined-with-oceans.compress.topo.bin combined-with-oceans.topo.bin
+          deduplicatetzpb -o combined-with-oceans.topo.bin combined-with-oceans.bin \
+            2> >(tee /tmp/stats-dedup-full.txt >&2)
+          compresstopotzpb -o combined-with-oceans.compress.topo.bin combined-with-oceans.topo.bin \
+            2> >(tee /tmp/stats-compress-full.txt >&2)
 
           # combined-with-oceans.topology.compress.topo.bin: topology-aware simplify + dedup + compress
-          reducetzpb -o combined-with-oceans.topology.bin combined-with-oceans.bin
-          deduplicatetzpb -o combined-with-oceans.topology.topo.bin combined-with-oceans.topology.bin
-          compresstopotzpb -o combined-with-oceans.topology.compress.topo.bin combined-with-oceans.topology.topo.bin
+          reducetzpb -o combined-with-oceans.topology.bin combined-with-oceans.bin \
+            2> >(tee /tmp/stats-reduce-topo.txt >&2)
+          deduplicatetzpb -o combined-with-oceans.topology.topo.bin combined-with-oceans.topology.bin \
+            2> >(tee /tmp/stats-dedup-topo.txt >&2)
+          compresstopotzpb -o combined-with-oceans.topology.compress.topo.bin combined-with-oceans.topology.topo.bin \
+            2> >(tee /tmp/stats-compress-topo.txt >&2)
 
           # combined-with-oceans.reduce.preindex.bin: classic simplify + tile pre-index
-          reducetzpb -topology=false -o combined-with-oceans.reduce.bin combined-with-oceans.bin
+          reducetzpb -topology=false -o combined-with-oceans.reduce.bin combined-with-oceans.bin \
+            2> >(tee /tmp/stats-reduce-classic.txt >&2)
           preindextzpb combined-with-oceans.reduce.bin
+
+      - name: Collect statistics and checksums
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          md5sum \
+            combined-with-oceans.compress.topo.bin \
+            combined-with-oceans.topology.compress.topo.bin \
+            combined-with-oceans.reduce.preindex.bin \
+            > checksums.md5
+
+          cat checksums.md5
+
+          python3 - <<'PYEOF'
+          import os, hashlib, pathlib
+
+          files = [
+              "combined-with-oceans.compress.topo.bin",
+              "combined-with-oceans.topology.compress.topo.bin",
+              "combined-with-oceans.reduce.preindex.bin",
+          ]
+
+          def read_stats(path):
+              try:
+                  return pathlib.Path(path).read_text().strip()
+              except FileNotFoundError:
+                  return "(no output)"
+
+          def fmt_size(n):
+              for unit in ("B", "KB", "MB", "GB"):
+                  if n < 1024:
+                      return f"{n:.1f} {unit}"
+                  n /= 1024
+              return f"{n:.1f} GB"
+
+          lines = []
+          lines.append("# Build Statistics")
+          lines.append("")
+          lines.append(f"**Timezone Boundary Builder version:** {os.environ['TBB_VERSION']}")
+          lines.append(f"**Build date:** {os.environ['BUILD_DATE']}")
+          lines.append("")
+
+          lines.append("## Output Files")
+          lines.append("")
+          lines.append("| File | Size | MD5 |")
+          lines.append("|------|------|-----|")
+          for f in files:
+              size = fmt_size(os.path.getsize(f))
+              md5 = hashlib.md5(open(f, "rb").read()).hexdigest()
+              lines.append(f"| `{f}` | {size} | `{md5}` |")
+          lines.append("")
+
+          sections = [
+              ("## Pipeline: `compress.topo.bin` (dedup + compress on full precision)", [
+                  ("deduplicatetzpb", "/tmp/stats-dedup-full.txt"),
+                  ("compresstopotzpb", "/tmp/stats-compress-full.txt"),
+              ]),
+              ("## Pipeline: `topology.compress.topo.bin` (topology-aware simplify + dedup + compress)", [
+                  ("reducetzpb -topology=true", "/tmp/stats-reduce-topo.txt"),
+                  ("deduplicatetzpb", "/tmp/stats-dedup-topo.txt"),
+                  ("compresstopotzpb", "/tmp/stats-compress-topo.txt"),
+              ]),
+              ("## Pipeline: `reduce.preindex.bin` (classic simplify + preindex)", [
+                  ("reducetzpb -topology=false", "/tmp/stats-reduce-classic.txt"),
+              ]),
+          ]
+
+          for heading, steps in sections:
+              lines.append(heading)
+              lines.append("")
+              for tool, path in steps:
+                  lines.append(f"### `{tool}`")
+                  lines.append("")
+                  lines.append("```")
+                  lines.append(read_stats(path))
+                  lines.append("```")
+                  lines.append("")
+
+          pathlib.Path("STATS.md").write_text("\n".join(lines) + "\n")
+          print("STATS.md written")
+          PYEOF
+
 
       - name: Push data branch (orphan, no history)
         if: steps.check-update.outputs.should_continue == 'true'
@@ -112,6 +201,7 @@ jobs:
           git add combined-with-oceans.compress.topo.bin
           git add combined-with-oceans.topology.compress.topo.bin
           git add combined-with-oceans.reduce.preindex.bin
+          git add STATS.md checksums.md5
 
           git commit -m "data: $TBB_VERSION"
 

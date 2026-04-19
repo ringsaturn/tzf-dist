@@ -12,10 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Upload release assets
+      - name: Upload release assets and update release notes
         uses: softprops/action-gh-release@v2
         with:
+          body_path: STATS.md
           files: |
             combined-with-oceans.compress.topo.bin
             combined-with-oceans.topology.compress.topo.bin
             combined-with-oceans.reduce.preindex.bin
+            checksums.md5
