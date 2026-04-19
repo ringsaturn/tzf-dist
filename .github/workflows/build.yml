@@ -111,6 +111,17 @@ jobs:
 
           python3 scripts/gen_stats.py
 
+      - name: Upload artifacts
+        if: steps.check-update.outputs.should_continue == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tzpb-${{ steps.tbb-version.outputs.version }}
+          path: |
+            combined-with-oceans.compress.topo.bin
+            combined-with-oceans.topology.compress.topo.bin
+            combined-with-oceans.reduce.preindex.bin
+            checksums.md5
+            STATS.md
 
       - name: Push data branch (orphan, no history)
         if: steps.check-update.outputs.should_continue == 'true'
