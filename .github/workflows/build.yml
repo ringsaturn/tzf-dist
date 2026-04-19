@@ -1,0 +1,118 @@
+name: build-tzpb
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+
+env:
+  # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
+  TZF_CLI_TOOL_VERSION: "v1.1.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Fetch latest timezone-boundary-builder version
+        id: tbb-version
+        run: |
+          VERSION=$(curl -sf "https://api.github.com/repos/evansiroky/timezone-boundary-builder/tags" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['name'] if d else '')")
+          if [ -z "$VERSION" ]; then
+            echo "Failed to fetch latest TBB version"
+            exit 1
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "TBB_VERSION=$VERSION" >> $GITHUB_ENV
+
+      - name: Check if data branch is already current
+        id: check-update
+        run: |
+          git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
+          CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
+          TBB="${{ steps.tbb-version.outputs.version }}"
+          if [ "$TBB" = "$CURRENT" ]; then
+            echo "Already up to date: $TBB"
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+          else
+            echo "Update needed: '$CURRENT' -> '$TBB'"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download timezone boundary data
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          wget "https://github.com/evansiroky/timezone-boundary-builder/releases/download/$TBB_VERSION/timezones-with-oceans.geojson.zip"
+          unzip timezones-with-oceans.geojson.zip
+
+      - name: Install CLI tools
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          go install github.com/ringsaturn/tzf/cmd/geojson2tzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/reducetzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/deduplicatetzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/compresstopotzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/preindextzpb@$TZF_CLI_TOOL_VERSION
+
+      - name: Generate binary files
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          geojson2tzpb combined-with-oceans.json
+
+          # combined-with-oceans.compress.topo.bin: dedup + compress on full precision data
+          deduplicatetzpb -o combined-with-oceans.topo.bin combined-with-oceans.bin
+          compresstopotzpb -o combined-with-oceans.compress.topo.bin combined-with-oceans.topo.bin
+
+          # combined-with-oceans.topology.compress.topo.bin: topology-aware simplify + dedup + compress
+          reducetzpb -o combined-with-oceans.topology.bin combined-with-oceans.bin
+          deduplicatetzpb -o combined-with-oceans.topology.topo.bin combined-with-oceans.topology.bin
+          compresstopotzpb -o combined-with-oceans.topology.compress.topo.bin combined-with-oceans.topology.topo.bin
+
+          # combined-with-oceans.reduce.preindex.bin: classic simplify + tile pre-index
+          reducetzpb -topology=false -o combined-with-oceans.reduce.bin combined-with-oceans.bin
+          preindextzpb combined-with-oceans.reduce.bin
+
+      - name: Push data branch (orphan, no history)
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Save Go module files before switching branches
+          cp embed.go /tmp/tzf-dist-embed.go
+          cp go.mod /tmp/tzf-dist-go.mod
+          cp .gitattributes /tmp/tzf-dist-gitattributes
+
+          # Create orphan branch; tracked files are removed but untracked binaries survive
+          git checkout --orphan data-new
+          git rm -rf .
+
+          # Restore Go module files
+          cp /tmp/tzf-dist-embed.go embed.go
+          cp /tmp/tzf-dist-go.mod go.mod
+          cp /tmp/tzf-dist-gitattributes .gitattributes
+
+          # Record the TBB version this data was built from
+          echo "$TBB_VERSION" > VERSION
+
+          git add embed.go go.mod .gitattributes VERSION
+          git add combined-with-oceans.compress.topo.bin
+          git add combined-with-oceans.topology.compress.topo.bin
+          git add combined-with-oceans.reduce.preindex.bin
+
+          git commit -m "data: $TBB_VERSION"
+
+          # Force push as data branch (no history retained; historical data via tags)
+          git push origin HEAD:data --force
