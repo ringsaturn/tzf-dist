@@ -17,7 +17,7 @@ include = [
     "LICENSE",
     "LICENSE_DATA",
     "combined-with-oceans.topology.compress.topo.bin",
-    "combined-with-oceans.reduce.preindex.bin",
+    "combined-with-oceans.topology.preindex.bin",
 ]
 
 [dependencies]

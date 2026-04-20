@@ -7,5 +7,5 @@ pub fn load_topology_compress_topo() -> &'static [u8] {
 /// Tile pre-index for fast fuzzy timezone lookup.
 /// Format: `PreindexTimezones` (~2 MB). Use with tzf-rs FuzzyFinder.
 pub fn load_preindex() -> &'static [u8] {
-    include_bytes!("../combined-with-oceans.reduce.preindex.bin")
+    include_bytes!("../combined-with-oceans.topology.preindex.bin")
 }

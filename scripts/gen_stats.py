@@ -16,7 +16,7 @@ import pathlib
 FILES = [
     "combined-with-oceans.compress.topo.bin",
     "combined-with-oceans.topology.compress.topo.bin",
-    "combined-with-oceans.reduce.preindex.bin",
+    "combined-with-oceans.topology.preindex.bin",
 ]
 
 SECTIONS = [
@@ -33,12 +33,6 @@ SECTIONS = [
             ("reducetzpb -topology=true", "/tmp/stats-reduce-topo.txt"),
             ("deduplicatetzpb", "/tmp/stats-dedup-topo.txt"),
             ("compresstopotzpb", "/tmp/stats-compress-topo.txt"),
-        ],
-    ),
-    (
-        "## Pipeline: `reduce.preindex.bin` (classic simplify + preindex)",
-        [
-            ("reducetzpb -topology=false", "/tmp/stats-reduce-classic.txt"),
         ],
     ),
 ]

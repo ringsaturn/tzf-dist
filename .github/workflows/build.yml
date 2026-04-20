@@ -89,17 +89,14 @@ jobs:
             2> >(tee /tmp/stats-compress-full.txt >&2)
 
           # combined-with-oceans.topology.compress.topo.bin: topology-aware simplify + dedup + compress
+          # combined-with-oceans.topology.preindex.bin:      topology-aware simplify + tile pre-index
           reducetzpb -o combined-with-oceans.topology.bin combined-with-oceans.bin \
             2> >(tee /tmp/stats-reduce-topo.txt >&2)
           deduplicatetzpb -o combined-with-oceans.topology.topo.bin combined-with-oceans.topology.bin \
             2> >(tee /tmp/stats-dedup-topo.txt >&2)
           compresstopotzpb -o combined-with-oceans.topology.compress.topo.bin combined-with-oceans.topology.topo.bin \
             2> >(tee /tmp/stats-compress-topo.txt >&2)
-
-          # combined-with-oceans.reduce.preindex.bin: classic simplify + tile pre-index
-          reducetzpb -topology=false -o combined-with-oceans.reduce.bin combined-with-oceans.bin \
-            2> >(tee /tmp/stats-reduce-classic.txt >&2)
-          preindextzpb combined-with-oceans.reduce.bin
+          preindextzpb combined-with-oceans.topology.bin
 
       - name: Collect statistics and checksums
         if: steps.check-update.outputs.should_continue == 'true'
@@ -109,7 +106,7 @@ jobs:
           md5sum \
             combined-with-oceans.compress.topo.bin \
             combined-with-oceans.topology.compress.topo.bin \
-            combined-with-oceans.reduce.preindex.bin \
+            combined-with-oceans.topology.preindex.bin \
             > checksums.md5
 
           cat checksums.md5
@@ -124,7 +121,7 @@ jobs:
           path: |
             combined-with-oceans.compress.topo.bin
             combined-with-oceans.topology.compress.topo.bin
-            combined-with-oceans.reduce.preindex.bin
+            combined-with-oceans.topology.preindex.bin
             checksums.md5
             STATS.md
 
@@ -170,7 +167,7 @@ jobs:
           git add Cargo.toml src/
           git add combined-with-oceans.compress.topo.bin
           git add combined-with-oceans.topology.compress.topo.bin
-          git add combined-with-oceans.reduce.preindex.bin
+          git add combined-with-oceans.topology.preindex.bin
           git add STATS.md checksums.md5
           git add LICENSE LICENSE_DATA README.md
 
