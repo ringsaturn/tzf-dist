@@ -131,6 +131,9 @@ jobs:
           cp embed.go /tmp/tzf-dist-embed.go
           cp go.mod /tmp/tzf-dist-go.mod
           cp .gitattributes /tmp/tzf-dist-gitattributes
+          cp LICENSE /tmp/tzf-dist-LICENSE
+          cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
+          cp README.md /tmp/tzf-dist-README.md
 
           # Create orphan branch; tracked files are removed but untracked binaries survive
           git checkout --orphan data-new
@@ -140,6 +143,9 @@ jobs:
           cp /tmp/tzf-dist-embed.go embed.go
           cp /tmp/tzf-dist-go.mod go.mod
           cp /tmp/tzf-dist-gitattributes .gitattributes
+          cp LICENSE /tmp/tzf-dist-LICENSE
+          cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
+          cp README.md /tmp/tzf-dist-README.md
 
           echo "$TIMEZONE_BOUNDARY_VERSION" > VERSION
 
@@ -148,6 +154,8 @@ jobs:
           git add combined-with-oceans.topology.compress.topo.bin
           git add combined-with-oceans.reduce.preindex.bin
           git add STATS.md checksums.md5
+
+          git add LICENSE LICENSE_DATA README.md
 
           git commit -m "data: $TIMEZONE_BOUNDARY_VERSION"
 
