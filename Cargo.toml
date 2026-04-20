@@ -1,0 +1,23 @@
+[package]
+name = "tzf-dist"
+# version is updated to "0.0.{year}-{letter}" (e.g. "0.0.2026-a") by the build workflow
+version = "0.0.0"
+edition = "2021"
+license = "ODbL-1.0"
+description = "Binary timezone data distribution for tzf-rs (CompressedTopoTimezones + PreindexTimezones formats)"
+homepage = "https://github.com/ringsaturn/tzf-dist"
+documentation = "https://github.com/ringsaturn/tzf-dist"
+repository = "https://github.com/ringsaturn/tzf-dist"
+readme = "README.md"
+# combined-with-oceans.compress.topo.bin (~17 MB) is excluded: too large for crates.io
+include = [
+    "src/**",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "LICENSE_DATA",
+    "combined-with-oceans.topology.compress.topo.bin",
+    "combined-with-oceans.reduce.preindex.bin",
+]
+
+[dependencies]

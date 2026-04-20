@@ -127,34 +127,44 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          # Save Go module files before switching branches
+          # Save tracked source files before switching to orphan branch
           cp embed.go /tmp/tzf-dist-embed.go
           cp go.mod /tmp/tzf-dist-go.mod
           cp .gitattributes /tmp/tzf-dist-gitattributes
           cp LICENSE /tmp/tzf-dist-LICENSE
           cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
           cp README.md /tmp/tzf-dist-README.md
+          cp Cargo.toml /tmp/tzf-dist-Cargo.toml
+          cp -r src /tmp/tzf-dist-src
 
           # Create orphan branch; tracked files are removed but untracked binaries survive
           git checkout --orphan data-new
           git rm -rf .
 
-          # Restore Go module files
+          # Restore source files
           cp /tmp/tzf-dist-embed.go embed.go
           cp /tmp/tzf-dist-go.mod go.mod
           cp /tmp/tzf-dist-gitattributes .gitattributes
-          cp LICENSE /tmp/tzf-dist-LICENSE
-          cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
-          cp README.md /tmp/tzf-dist-README.md
+          cp /tmp/tzf-dist-LICENSE LICENSE
+          cp /tmp/tzf-dist-LICENSE_DATA LICENSE_DATA
+          cp /tmp/tzf-dist-README.md README.md
+          cp /tmp/tzf-dist-Cargo.toml Cargo.toml
+          cp -r /tmp/tzf-dist-src src
+
+          # Update Cargo.toml version: "2026a" -> "0.0.2026-a"
+          CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
+          CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
+          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}"
+          sed -i "s/^version = \"0.0.0\"/version = \"$CARGO_VERSION\"/" Cargo.toml
 
           echo "$TIMEZONE_BOUNDARY_VERSION" > VERSION
 
           git add embed.go go.mod .gitattributes VERSION
+          git add Cargo.toml src/
           git add combined-with-oceans.compress.topo.bin
           git add combined-with-oceans.topology.compress.topo.bin
           git add combined-with-oceans.reduce.preindex.bin
           git add STATS.md checksums.md5
-
           git add LICENSE LICENSE_DATA README.md
 
           git commit -m "data: $TIMEZONE_BOUNDARY_VERSION"
