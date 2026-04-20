@@ -9,6 +9,10 @@ on:
         description: "Force rebuild even if data branch is already current"
         type: boolean
         default: false
+      version_suffix:
+        description: "Optional suffix appended to the TBB version for patch releases (e.g. -fix1). Leave empty for normal builds."
+        type: string
+        default: ""
 
 env:
   # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
@@ -39,19 +43,22 @@ jobs:
             echo "Failed to fetch latest TBB version"
             exit 1
           fi
+          DIST_VERSION="${VERSION}${{ inputs.version_suffix }}"
           echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_OUTPUT
           echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DIST_VERSION=$DIST_VERSION" >> $GITHUB_OUTPUT
+          echo "DIST_VERSION=$DIST_VERSION" >> $GITHUB_ENV
 
       - name: Check if data branch is already current
         id: check-update
         run: |
           git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
           CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
-          if [ "$TIMEZONE_BOUNDARY_VERSION" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
-            echo "Already up to date: $TIMEZONE_BOUNDARY_VERSION"
+          if [ "$DIST_VERSION" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Already up to date: $DIST_VERSION"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           else
-            echo "Update needed: '$CURRENT' -> '$TIMEZONE_BOUNDARY_VERSION' (force=${{ inputs.force }})"
+            echo "Update needed: '$CURRENT' -> '$DIST_VERSION' (force=${{ inputs.force }})"
             echo "should_continue=true" >> $GITHUB_OUTPUT
           fi
 
@@ -113,7 +120,7 @@ jobs:
         if: steps.check-update.outputs.should_continue == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: tzpb-${{ steps.fetch-version.outputs.TIMEZONE_BOUNDARY_VERSION }}
+          name: tzpb-${{ steps.fetch-version.outputs.DIST_VERSION }}
           path: |
             combined-with-oceans.compress.topo.bin
             combined-with-oceans.topology.compress.topo.bin
@@ -151,13 +158,13 @@ jobs:
           cp /tmp/tzf-dist-Cargo.toml Cargo.toml
           cp -r /tmp/tzf-dist-src src
 
-          # Update Cargo.toml version: "2026a" -> "0.0.2026-a"
+          # Update Cargo.toml version: "2026a" + optional suffix -> "0.0.2026-a[-suffix]"
           CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
           CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
-          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}"
+          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
           sed -i "s/^version = \"0.0.0\"/version = \"$CARGO_VERSION\"/" Cargo.toml
 
-          echo "$TIMEZONE_BOUNDARY_VERSION" > VERSION
+          echo "$DIST_VERSION" > VERSION
 
           git add embed.go go.mod .gitattributes VERSION
           git add Cargo.toml src/
@@ -167,7 +174,7 @@ jobs:
           git add STATS.md checksums.md5
           git add LICENSE LICENSE_DATA README.md
 
-          git commit -m "data: $TIMEZONE_BOUNDARY_VERSION"
+          git commit -m "data: $DIST_VERSION"
 
           # Force push as data branch (no history retained; historical data via tags)
           git push origin HEAD:data --force
