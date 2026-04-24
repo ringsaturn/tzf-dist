@@ -142,9 +142,11 @@ jobs:
           cp Cargo.lock /tmp/tzf-dist-Cargo.lock
           cp -r src /tmp/tzf-dist-src
 
-          # Create orphan branch; tracked files are removed but untracked binaries survive
+          # Create orphan branch; remove tracked files from index only so generated
+          # binaries on disk are preserved for the subsequent git add steps
           git checkout --orphan data-new
-          git rm -rf .
+          git rm --cached -rf .
+          rm -f .gitignore
 
           # Restore source files
           cp /tmp/tzf-dist-embed.go embed.go
