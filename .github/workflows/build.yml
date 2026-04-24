@@ -141,6 +141,7 @@ jobs:
           cp Cargo.toml /tmp/tzf-dist-Cargo.toml
           cp Cargo.lock /tmp/tzf-dist-Cargo.lock
           cp -r src /tmp/tzf-dist-src
+          cp -r .github /tmp/tzf-dist-github
 
           # Create orphan branch; remove tracked files from index only so generated
           # binaries on disk are preserved for the subsequent git add steps
@@ -158,6 +159,7 @@ jobs:
           cp /tmp/tzf-dist-Cargo.toml Cargo.toml
           cp /tmp/tzf-dist-Cargo.lock Cargo.lock
           cp -r /tmp/tzf-dist-src src
+          cp -r /tmp/tzf-dist-github .github
 
           # Update Cargo.toml version: "2026a" + optional suffix -> "0.0.2026-a[-suffix]"
           CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
@@ -169,6 +171,7 @@ jobs:
 
           git add embed.go go.mod .gitattributes VERSION
           git add Cargo.toml Cargo.lock src/
+          git add .github/
           git add combined-with-oceans.compress.topo.bin
           git add combined-with-oceans.topology.compress.topo.bin
           git add combined-with-oceans.topology.preindex.bin
