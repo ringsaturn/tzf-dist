@@ -139,6 +139,7 @@ jobs:
           cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
           cp README.md /tmp/tzf-dist-README.md
           cp Cargo.toml /tmp/tzf-dist-Cargo.toml
+          cp Cargo.lock /tmp/tzf-dist-Cargo.lock
           cp -r src /tmp/tzf-dist-src
 
           # Create orphan branch; tracked files are removed but untracked binaries survive
@@ -153,6 +154,7 @@ jobs:
           cp /tmp/tzf-dist-LICENSE_DATA LICENSE_DATA
           cp /tmp/tzf-dist-README.md README.md
           cp /tmp/tzf-dist-Cargo.toml Cargo.toml
+          cp /tmp/tzf-dist-Cargo.lock Cargo.lock
           cp -r /tmp/tzf-dist-src src
 
           # Update Cargo.toml version: "2026a" + optional suffix -> "0.0.2026-a[-suffix]"
@@ -164,7 +166,7 @@ jobs:
           echo "$DIST_VERSION" > VERSION
 
           git add embed.go go.mod .gitattributes VERSION
-          git add Cargo.toml src/
+          git add Cargo.toml Cargo.lock src/
           git add combined-with-oceans.compress.topo.bin
           git add combined-with-oceans.topology.compress.topo.bin
           git add combined-with-oceans.topology.preindex.bin
