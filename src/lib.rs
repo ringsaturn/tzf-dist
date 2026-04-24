@@ -9,3 +9,8 @@ pub fn load_topology_compress_topo() -> &'static [u8] {
 pub fn load_preindex() -> &'static [u8] {
     include_bytes!("../combined-with-oceans.topology.preindex.bin")
 }
+
+#[cfg(feature = "full")]
+mod full;
+#[cfg(feature = "full")]
+pub use full::load_compress_topo;
