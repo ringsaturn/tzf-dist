@@ -158,8 +158,8 @@ jobs:
           cp /tmp/tzf-dist-README.md README.md
           cp /tmp/tzf-dist-Cargo.toml Cargo.toml
           cp /tmp/tzf-dist-Cargo.lock Cargo.lock
-          cp -r /tmp/tzf-dist-src src
-          cp -r /tmp/tzf-dist-github .github
+          rm -rf src && cp -r /tmp/tzf-dist-src src
+          rm -rf .github && cp -r /tmp/tzf-dist-github .github
 
           # Update Cargo.toml version: "2026a" + optional suffix -> "0.0.2026-a[-suffix]"
           CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
