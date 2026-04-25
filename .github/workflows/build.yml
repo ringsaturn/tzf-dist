@@ -130,6 +130,10 @@ jobs:
             checksums.md5
             STATS.md
 
+      - name: Set up Rust
+        if: steps.check-update.outputs.should_continue == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Push data branch (orphan, no history)
         if: steps.check-update.outputs.should_continue == 'true'
         run: |
@@ -171,6 +175,7 @@ jobs:
           CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
           CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
           sed -i "s/^version = \"0.0.0\"/version = \"$CARGO_VERSION\"/" Cargo.toml
+          cargo generate-lockfile
 
           echo "$DIST_VERSION" > VERSION
 
