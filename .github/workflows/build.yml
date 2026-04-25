@@ -20,7 +20,7 @@ on:
 
 env:
   # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
-  TZF_CLI_TOOL_VERSION: "7ad59d922e9ae9438c8d037161cf5432481750f1"
+  TZF_CLI_TOOL_VERSION: "5adf93f4be357fdd0a955231d0374783577cbb62"
 
 jobs:
   build:
@@ -101,7 +101,8 @@ jobs:
             2> >(tee /tmp/stats-dedup-topo.txt >&2)
           compresstopotzpb -o combined-with-oceans.topology.compress.topo.bin combined-with-oceans.topology.topo.bin \
             2> >(tee /tmp/stats-compress-topo.txt >&2)
-          preindextzpb combined-with-oceans.topology.bin
+          preindextzpb combined-with-oceans.topology.bin \
+            2> >(tee /tmp/stats-preindex.txt >&2)
 
       - name: Collect statistics and checksums
         if: steps.check-update.outputs.should_continue == 'true'

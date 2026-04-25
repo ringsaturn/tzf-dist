@@ -35,6 +35,12 @@ SECTIONS = [
             ("compresstopotzpb", "/tmp/stats-compress-topo.txt"),
         ],
     ),
+    (
+        "## Pipeline: `topology.preindex.bin` (topology-aware simplify + tile pre-index)",
+        [
+            ("preindextzpb", "/tmp/stats-preindex.txt"),
+        ],
+    ),
 ]
 
 
