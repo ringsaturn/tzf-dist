@@ -31,7 +31,7 @@ jobs:
           files: |
             combined-with-oceans.compress.topo.bin
             combined-with-oceans.topology.compress.topo.bin
-            combined-with-oceans.reduce.preindex.bin
+            combined-with-oceans.topology.preindex.bin
             checksums.md5
 
   publish-crate:
