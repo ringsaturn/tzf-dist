@@ -23,7 +23,7 @@ include = [
 [features]
 # Includes the full-precision CompressedTopoTimezones dataset (~17 MB).
 # Only available via git dependency — the file is excluded from the crates.io package.
-# Usage: tzf-dist = { git = "https://github.com/ringsaturn/tzf-dist", tag = "...", features = ["full"] }
+# Usage: tzf-dist = { git = "https://github.com/ringsaturn/tzf-dist", tag = "...", features = ["full"], default-features = false}
 full = []
 
 [dependencies]
