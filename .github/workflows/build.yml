@@ -1,0 +1,219 @@
+name: build-tzpb
+
+on:
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even if data branch is already current"
+        type: boolean
+        default: false
+      version_suffix:
+        description: "Optional suffix appended to the TBB version for patch releases (e.g. -fix1). Leave empty for normal builds."
+        type: string
+        default: ""
+      auto_tag:
+        description: "Create a GitHub Release after pushing data branch, which triggers release.yml. Requires GH_TOKEN secret (PAT) — GITHUB_TOKEN cannot trigger other workflows."
+        type: boolean
+        default: false
+
+env:
+  # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
+  TZF_CLI_TOOL_VERSION: "2c5ef58f5d86010986382e238da9761b31b166ba"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Fetch latest timezone-boundary-builder version
+        id: fetch-version
+        run: |
+          VERSION=$(curl -sf "https://api.github.com/repos/evansiroky/timezone-boundary-builder/tags" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['name'] if d else '')")
+          if [ -z "$VERSION" ]; then
+            echo "Failed to fetch latest TBB version"
+            exit 1
+          fi
+          DIST_VERSION="${VERSION}${{ inputs.version_suffix }}"
+          echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DIST_VERSION=$DIST_VERSION" >> $GITHUB_OUTPUT
+          echo "DIST_VERSION=$DIST_VERSION" >> $GITHUB_ENV
+
+      - name: Check if data branch is already current
+        id: check-update
+        run: |
+          git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
+          CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
+          if [ "$DIST_VERSION" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Already up to date: $DIST_VERSION"
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+          else
+            echo "Update needed: '$CURRENT' -> '$DIST_VERSION' (force=${{ inputs.force }})"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download timezone boundary data
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          wget "https://github.com/evansiroky/timezone-boundary-builder/releases/download/$TIMEZONE_BOUNDARY_VERSION/timezones-with-oceans.geojson.zip"
+          unzip timezones-with-oceans.geojson.zip
+
+      - name: Install CLI tools
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          go install github.com/ringsaturn/tzf/cmd/geojson2tzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/reducetzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/deduplicatetzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/compresstopotzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/cmd/preindextzpb@$TZF_CLI_TOOL_VERSION
+
+      - name: Generate binary files
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          geojson2tzpb combined-with-oceans.json
+
+          # combined-with-oceans.compress.topo.bin: dedup + compress on full precision data
+          deduplicatetzpb -o combined-with-oceans.topo.bin combined-with-oceans.bin \
+            2> >(tee /tmp/stats-dedup-full.txt >&2)
+          compresstopotzpb -o combined-with-oceans.compress.topo.bin combined-with-oceans.topo.bin \
+            2> >(tee /tmp/stats-compress-full.txt >&2)
+
+          # combined-with-oceans.topology.compress.topo.bin: topology-aware simplify + dedup + compress
+          # combined-with-oceans.topology.preindex.bin:      topology-aware simplify + tile pre-index
+          reducetzpb -o combined-with-oceans.topology.bin combined-with-oceans.bin \
+            2> >(tee /tmp/stats-reduce-topo.txt >&2)
+          deduplicatetzpb -o combined-with-oceans.topology.topo.bin combined-with-oceans.topology.bin \
+            2> >(tee /tmp/stats-dedup-topo.txt >&2)
+          compresstopotzpb -o combined-with-oceans.topology.compress.topo.bin combined-with-oceans.topology.topo.bin \
+            2> >(tee /tmp/stats-compress-topo.txt >&2)
+          preindextzpb combined-with-oceans.topology.bin \
+            2> >(tee /tmp/stats-preindex.txt >&2)
+
+      - name: Collect statistics and checksums
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          md5sum \
+            combined-with-oceans.compress.topo.bin \
+            combined-with-oceans.topology.compress.topo.bin \
+            combined-with-oceans.topology.preindex.bin \
+            > checksums.md5
+
+          cat checksums.md5
+
+          python3 scripts/gen_stats.py
+
+      - name: Upload artifacts
+        if: steps.check-update.outputs.should_continue == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tzpb-${{ steps.fetch-version.outputs.DIST_VERSION }}
+          path: |
+            combined-with-oceans.compress.topo.bin
+            combined-with-oceans.topology.compress.topo.bin
+            combined-with-oceans.topology.preindex.bin
+            checksums.md5
+            STATS.md
+
+      - name: Set up Rust
+        if: steps.check-update.outputs.should_continue == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Push data branch (orphan, no history)
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Save tracked source files before switching to orphan branch
+          cp embed.go /tmp/tzf-dist-embed.go
+          cp go.mod /tmp/tzf-dist-go.mod
+          cp .gitattributes /tmp/tzf-dist-gitattributes
+          cp LICENSE /tmp/tzf-dist-LICENSE
+          cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
+          cp README.md /tmp/tzf-dist-README.md
+          cp Cargo.toml /tmp/tzf-dist-Cargo.toml
+          cp Cargo.lock /tmp/tzf-dist-Cargo.lock
+          cp -r src /tmp/tzf-dist-src
+          cp -r .github /tmp/tzf-dist-github
+
+          # Create orphan branch; remove tracked files from index only so generated
+          # binaries on disk are preserved for the subsequent git add steps
+          git checkout --orphan data-new
+          git rm --cached -rf .
+          rm -f .gitignore
+
+          # Restore source files
+          cp /tmp/tzf-dist-embed.go embed.go
+          cp /tmp/tzf-dist-go.mod go.mod
+          cp /tmp/tzf-dist-gitattributes .gitattributes
+          cp /tmp/tzf-dist-LICENSE LICENSE
+          cp /tmp/tzf-dist-LICENSE_DATA LICENSE_DATA
+          cp /tmp/tzf-dist-README.md README.md
+          cp /tmp/tzf-dist-Cargo.toml Cargo.toml
+          cp /tmp/tzf-dist-Cargo.lock Cargo.lock
+          rm -rf src && cp -r /tmp/tzf-dist-src src
+          rm -rf .github && cp -r /tmp/tzf-dist-github .github
+
+          # Update Cargo.toml version: "2026a" + optional suffix -> "0.0.2026-a[-suffix]"
+          CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
+          CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
+          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
+          sed -i "s/^version = \"0.0.0\"/version = \"$CARGO_VERSION\"/" Cargo.toml
+          cargo generate-lockfile
+
+          echo "$DIST_VERSION" > VERSION
+
+          git add embed.go go.mod .gitattributes VERSION
+          git add Cargo.toml Cargo.lock src/
+          git add .github/
+          git add combined-with-oceans.compress.topo.bin
+          git add combined-with-oceans.topology.compress.topo.bin
+          git add combined-with-oceans.topology.preindex.bin
+          git add STATS.md checksums.md5
+          git add LICENSE LICENSE_DATA README.md
+
+          git commit -m "data: $DIST_VERSION"
+
+          # Force push as data branch (no history retained; historical data via tags)
+          git push origin HEAD:data --force
+
+      - name: Create tag and dispatch release workflow
+        if: steps.check-update.outputs.should_continue == 'true' && inputs.auto_tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
+          CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
+          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
+          TAG="v${CARGO_VERSION}"
+          DATA_SHA=$(git rev-parse HEAD)
+
+          gh api repos/${{ github.repository }}/git/refs \
+            -f ref="refs/tags/${TAG}" \
+            -f sha="${DATA_SHA}"
+
+          gh release create "${TAG}" \
+            --target data \
+            --title "${TAG}" \
+            --notes-file STATS.md
+
+          gh workflow run release.yml \
+            --ref data \
+            --field tag="${TAG}"
