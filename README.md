@@ -18,6 +18,8 @@ You can view the file in
 [`tzf-bin-viewer`](https://ringsaturn.github.io/tzf-bin-viewer/) once you
 download it.
 
+The underlying data structures are defined in the [tzinfo.proto](https://github.com/ringsaturn/tzf/blob/main/pb/tzf/v1/tzinfo.proto).
+
 ## Branch structure
 
 - **`main`** — source code, workflows, and `embed.go` template; never tagged
