@@ -20,7 +20,7 @@ on:
 
 env:
   # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
-  TZF_CLI_TOOL_VERSION: "2c5ef58f5d86010986382e238da9761b31b166ba"
+  TZF_CLI_TOOL_VERSION: "2dd1206b8d5840c141327209fd55e1d2187b84a8"
 
 jobs:
   build:
