@@ -209,11 +209,6 @@ jobs:
             -f ref="refs/tags/${TAG}" \
             -f sha="${DATA_SHA}"
 
-          gh release create "${TAG}" \
-            --target data \
-            --title "${TAG}" \
-            --notes-file STATS.md
-
           gh workflow run release.yml \
             --ref data \
             --field tag="${TAG}"

@@ -1,8 +1,6 @@
 name: release
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       tag:
@@ -10,23 +8,24 @@ on:
         required: true
         type: string
 
-env:
-  CARGO_TERM_COLOR: always
-
 jobs:
-  upload-assets:
+  release:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+    environment:
+      name: publish
+      url: https://crates.io/crates/tzf-dist
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag }}
 
-      - name: Upload release assets and update release notes
+      - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag || github.ref_name }}
+          tag_name: ${{ inputs.tag }}
           body_path: STATS.md
           files: |
             combined-with-oceans.compress.topo.bin
@@ -34,29 +33,13 @@ jobs:
             combined-with-oceans.topology.preindex.bin
             checksums.md5
 
-  publish-crate:
-    runs-on: ubuntu-latest
-    if: |
-      (github.event_name == 'release' && github.event.release.target_commitish == 'data') ||
-      github.event_name == 'workflow_dispatch'
-    environment:
-      name: publish
-      url: https://crates.io/crates/tzf-dist
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          ref: ${{ inputs.tag || github.ref }}
-
       - uses: dtolnay/rust-toolchain@stable
 
       - name: Verify tag matches Cargo version
         shell: bash
         run: |
-          tag_name="${{ inputs.tag || github.ref_name }}"
-          tag_version="${tag_name#v}"
+          tag_version="${{ inputs.tag }}"
+          tag_version="${tag_version#v}"
           cargo_version="$(cargo pkgid | sed -E 's/.*#//')"
 
           if [ "${tag_version}" != "${cargo_version}" ]; then
