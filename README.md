@@ -30,6 +30,10 @@ Historical data is accessible via tags — each tag points to a single orphan
 commit on `data` that contains the binary files for that
 timezone-boundary-builder version.
 
+Each `data` commit also contains `STATS.md` for compression statistics and
+`BORDER_CHANGE.md` for simplification accuracy statistics. Both reports are
+included in the corresponding GitHub Release notes.
+
 ## Usage (Go module)
 
 Import a tagged version (tags point to `data` branch commits containing the

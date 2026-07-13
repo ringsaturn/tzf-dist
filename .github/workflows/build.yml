@@ -21,6 +21,8 @@ on:
 env:
   # Requires tzf v1.1.0+ which includes deduplicatetzpb and compresstopotzpb
   TZF_CLI_TOOL_VERSION: "v1.2.3-beta1"
+  # borderchange was added after v1.2.3. Pin its source commit for reproducibility.
+  TZF_BORDERCHANGE_TOOL_VERSION: "9a8c7b54216b7da5642901cc2891ae95d7b70259"
 
 jobs:
   build:
@@ -81,6 +83,7 @@ jobs:
           go install github.com/ringsaturn/tzf/cmd/deduplicatetzpb@$TZF_CLI_TOOL_VERSION
           go install github.com/ringsaturn/tzf/cmd/compresstopotzpb@$TZF_CLI_TOOL_VERSION
           go install github.com/ringsaturn/tzf/cmd/preindextzpb@$TZF_CLI_TOOL_VERSION
+          go install github.com/ringsaturn/tzf/internal/cmd/borderchange@$TZF_BORDERCHANGE_TOOL_VERSION
 
       - name: Generate binary files
         if: steps.check-update.outputs.should_continue == 'true'
@@ -103,6 +106,16 @@ jobs:
             2> >(tee /tmp/stats-compress-topo.txt >&2)
           preindextzpb combined-with-oceans.topology.bin \
             2> >(tee /tmp/stats-preindex.txt >&2)
+
+      - name: Measure border changes
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          borderchange \
+            -certification-tolerance-m 0.5 \
+            -top-pairs 20 \
+            combined-with-oceans.json \
+            combined-with-oceans.topology.compress.topo.bin \
+            > BORDER_CHANGE.md
 
       - name: Collect statistics and checksums
         if: steps.check-update.outputs.should_continue == 'true'
@@ -130,6 +143,7 @@ jobs:
             combined-with-oceans.topology.preindex.bin
             checksums.md5
             STATS.md
+            BORDER_CHANGE.md
 
       - name: Set up Rust
         if: steps.check-update.outputs.should_continue == 'true'
@@ -186,7 +200,7 @@ jobs:
           git add combined-with-oceans.compress.topo.bin
           git add combined-with-oceans.topology.compress.topo.bin
           git add combined-with-oceans.topology.preindex.bin
-          git add STATS.md checksums.md5
+          git add STATS.md BORDER_CHANGE.md checksums.md5
           git add LICENSE LICENSE_DATA README.md
 
           git commit -m "data: $DIST_VERSION"

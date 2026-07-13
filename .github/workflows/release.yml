@@ -22,11 +22,19 @@ jobs:
         with:
           ref: ${{ inputs.tag }}
 
+      - name: Compose release notes
+        run: |
+          {
+            cat STATS.md
+            printf '\n'
+            cat BORDER_CHANGE.md
+          } > RELEASE_NOTES.md
+
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ inputs.tag }}
-          body_path: STATS.md
+          body_path: RELEASE_NOTES.md
           files: |
             combined-with-oceans.compress.topo.bin
             combined-with-oceans.topology.compress.topo.bin
