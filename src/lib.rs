@@ -9,8 +9,3 @@ pub fn load_lite_tzb() -> &'static [u8] {
 mod full;
 #[cfg(feature = "full")]
 pub use full::load_full_tzb;
-
-#[cfg(feature = "tzm")]
-mod tzm;
-#[cfg(feature = "tzm")]
-pub use tzm::load_lite_tzm;

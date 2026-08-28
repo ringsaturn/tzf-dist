@@ -62,9 +62,10 @@ tzf-dist = "..."
 let data = tzf_dist::load_lite_tzb();
 ```
 
-If you need full data precision or the `.tzm` memory image, use the `full` /
-`tzm` feature flags with a git based dependency (those files are not
-available on crates.io due to size constraints):
+If you need full data precision, use the `full` feature flag with a git
+based dependency (the file is not available on crates.io due to size
+constraints). The `.tzm` memory image is Go-only: tzf-rs consumes the `.tzb`
+profile exclusively (see the tzf-rs v2 port record in the tzf RFCs).
 
 ```toml
 [dependencies]

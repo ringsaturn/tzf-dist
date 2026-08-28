@@ -24,7 +24,5 @@ include = [
 # Only available via git dependency — the file is excluded from the crates.io package.
 # Usage: tzf-dist = { git = "https://github.com/ringsaturn/tzf-dist", tag = "...", features = ["full"], default-features = false}
 full = []
-# Includes the lite .tzm memory image (~10 MB). Git dependency only, same as above.
-tzm = []
 
 [dependencies]
