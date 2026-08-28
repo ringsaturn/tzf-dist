@@ -1,16 +1,16 @@
-/// Topology-aware simplified + shared-edge dedup + polyline compressed timezone data.
-/// Format: `CompressedTopoTimezones` (~5.4 MB). Use with tzf-rs lite/full finders.
-pub fn load_topology_compress_topo() -> &'static [u8] {
-    include_bytes!("../combined-with-oceans.topology.compress.topo.bin")
-}
-
-/// Tile pre-index for fast fuzzy timezone lookup.
-/// Format: `PreindexTimezones` (~2 MB). Use with tzf-rs FuzzyFinder.
-pub fn load_preindex() -> &'static [u8] {
-    include_bytes!("../combined-with-oceans.topology.preindex.bin")
+/// Compact TZF embedded-binary timezone data (`.tzb`, E profile, FUZZY
+/// preindex included). Format: TZF embedded binary 1.1 — parse with tzf-rs
+/// or any reader of the spec. Backs the lite finders.
+pub fn load_lite_tzb() -> &'static [u8] {
+    include_bytes!("../lite.tzb")
 }
 
 #[cfg(feature = "full")]
 mod full;
 #[cfg(feature = "full")]
-pub use full::load_compress_topo;
+pub use full::load_full_tzb;
+
+#[cfg(feature = "tzm")]
+mod tzm;
+#[cfg(feature = "tzm")]
+pub use tzm::load_lite_tzm;

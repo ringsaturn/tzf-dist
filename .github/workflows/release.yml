@@ -36,9 +36,9 @@ jobs:
           tag_name: ${{ inputs.tag }}
           body_path: RELEASE_NOTES.md
           files: |
-            combined-with-oceans.compress.topo.bin
-            combined-with-oceans.topology.compress.topo.bin
-            combined-with-oceans.topology.preindex.bin
+            lite.tzb
+            lite.tzm
+            full.tzb
             checksums.md5
 
       - uses: dtolnay/rust-toolchain@stable

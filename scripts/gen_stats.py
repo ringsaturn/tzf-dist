@@ -14,31 +14,34 @@ import os
 import pathlib
 
 FILES = [
-    "combined-with-oceans.compress.topo.bin",
-    "combined-with-oceans.topology.compress.topo.bin",
-    "combined-with-oceans.topology.preindex.bin",
+    "lite.tzb",
+    "lite.tzm",
+    "full.tzb",
 ]
 
 SECTIONS = [
     (
-        "## Pipeline: `compress.topo.bin` (dedup + compress on full precision)",
+        "## Pipeline: `full.tzb` (dedup + compress on full precision)",
         [
             ("deduplicatetzpb", "/tmp/stats-dedup-full.txt"),
             ("compresstopotzpb", "/tmp/stats-compress-full.txt"),
+            ("topo2embed -profile e", "/tmp/stats-embed-full.txt"),
         ],
     ),
     (
-        "## Pipeline: `topology.compress.topo.bin` (topology-aware simplify + dedup + compress)",
+        "## Pipeline: `lite.tzb` (topology-aware simplify + dedup + compress + preindex)",
         [
             ("reducetzpb -topology=true", "/tmp/stats-reduce-topo.txt"),
             ("deduplicatetzpb", "/tmp/stats-dedup-topo.txt"),
             ("compresstopotzpb", "/tmp/stats-compress-topo.txt"),
+            ("preindextzpb", "/tmp/stats-preindex.txt"),
+            ("topo2embed -profile e -preindex", "/tmp/stats-embed-lite.txt"),
         ],
     ),
     (
-        "## Pipeline: `topology.preindex.bin` (topology-aware simplify + tile pre-index)",
+        "## Pipeline: `lite.tzm` (memory-image transcode of lite.tzb)",
         [
-            ("preindextzpb", "/tmp/stats-preindex.txt"),
+            ("tzb2tzm", "/tmp/stats-tzm.txt"),
         ],
     ),
 ]

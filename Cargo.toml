@@ -4,26 +4,27 @@ name = "tzf-dist"
 version = "0.0.0"
 edition = "2021"
 license = "MIT AND ODbL-1.0"
-description = "Binary timezone data distribution for tzf-rs (CompressedTopoTimezones + PreindexTimezones formats)"
+description = "Binary timezone data distribution for tzf-rs (TZF embedded-binary .tzb format)"
 homepage = "https://github.com/ringsaturn/tzf-dist"
 documentation = "https://github.com/ringsaturn/tzf-dist"
 repository = "https://github.com/ringsaturn/tzf-dist"
 readme = "README.md"
-# combined-with-oceans.compress.topo.bin (~17 MB) is excluded: too large for crates.io
+# full.tzb (~14 MB) and lite.tzm (~10 MB) are excluded: too large for crates.io
 include = [
     "src/lib.rs",
     "Cargo.toml",
     "README.md",
     "LICENSE",
     "LICENSE_DATA",
-    "combined-with-oceans.topology.compress.topo.bin",
-    "combined-with-oceans.topology.preindex.bin",
+    "lite.tzb",
 ]
 
 [features]
-# Includes the full-precision CompressedTopoTimezones dataset (~17 MB).
+# Includes the full-precision .tzb dataset (~14 MB).
 # Only available via git dependency — the file is excluded from the crates.io package.
 # Usage: tzf-dist = { git = "https://github.com/ringsaturn/tzf-dist", tag = "...", features = ["full"], default-features = false}
 full = []
+# Includes the lite .tzm memory image (~10 MB). Git dependency only, same as above.
+tzm = []
 
 [dependencies]

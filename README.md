@@ -8,17 +8,21 @@ If you have any questions or suggestions, please open an issue in the
 
 ## Files
 
-| File                                              | Format                    | Size   | Description                                                              |
-| ------------------------------------------------- | ------------------------- | ------ | ------------------------------------------------------------------------ |
-| `combined-with-oceans.compress.topo.bin`          | `CompressedTopoTimezones` | ~17MB  | Full precision: shared-edge dedup + polyline compression                 |
-| `combined-with-oceans.topology.compress.topo.bin` | `CompressedTopoTimezones` | ~5.4MB | Lite: topology-aware simplify + shared-edge dedup + polyline compression |
-| `combined-with-oceans.reduce.preindex.bin`        | `PreindexTimezones`       | ~2MB   | Tile pre-index for FuzzyFinder                                           |
+| File       | Format                    | Size   | Description                                                        |
+| ---------- | ------------------------- | ------ | ------------------------------------------------------------------ |
+| `lite.tzb` | TZF embedded binary (E)   | ~4MB   | Lite: topology-aware simplify + dedup + compression, FUZZY preindex included |
+| `lite.tzm` | TZF embedded binary (M)   | ~10MB  | Memory image of `lite.tzb`: the file is the query-time structure   |
+| `full.tzb` | TZF embedded binary (E)   | ~14MB  | Full precision: dedup + compression, FUZZY preindex included       |
 
-You can view the file in
-[`tzf-bin-viewer`](https://ringsaturn.github.io/tzf-bin-viewer/) once you
-download it.
+All three files carry the same `data_version`. `full.tzm` is never
+distributed — derive it locally with tzf's `tzb2tzm` when needed.
 
-The underlying data structures are defined in the [tzinfo.proto](https://github.com/ringsaturn/tzf/blob/main/pb/tzf/v1/tzinfo.proto).
+The container format is specified in the tzf repository
+(`rfc/tzf/2026-07-19-tzf-for-embedded-bin.spec-v1.md`, format 1.1).
+
+Releases up to `v0.0.2026-c-fix1` distributed the retired protobuf artifact
+set (`CompressedTopoTimezones` / `PreindexTimezones`); those tags remain
+available for the frozen tzf v1 line and pre-`.tzb` tzf-rs versions.
 
 ## Branch structure
 
@@ -42,9 +46,9 @@ embedded files):
 ```go
 import tzfdist "github.com/ringsaturn/tzf-dist"
 
-// tzfdist.CompressTopoData        — full precision CompressedTopoTimezones
-// tzfdist.TopologyCompressTopoData — lite CompressedTopoTimezones
-// tzfdist.PreindexData             — tile pre-index
+// tzfdist.LiteTZB — lite .tzb (backs tzf/v2 NewEmbeddedFinder)
+// tzfdist.LiteTZM — lite .tzm (backs tzf/v2 NewDefaultFinder)
+// tzfdist.FullTZB — full .tzb (backs tzf/v2 NewFullFinder)
 ```
 
 ## Usage (Rust crate)
@@ -54,8 +58,13 @@ import tzfdist "github.com/ringsaturn/tzf-dist"
 tzf-dist = "..."
 ```
 
-If you need full data precision, use the `full` feature flag with git based
-dependency(full data is not available on crates.io due to size constraints):
+```rust
+let data = tzf_dist::load_lite_tzb();
+```
+
+If you need full data precision or the `.tzm` memory image, use the `full` /
+`tzm` feature flags with a git based dependency (those files are not
+available on crates.io due to size constraints):
 
 ```toml
 [dependencies]
