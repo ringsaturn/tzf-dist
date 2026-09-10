@@ -27,12 +27,10 @@ env:
   # go.mod replaces tzf-dist with this checkout, so the tools embed the data
   # being built). Pin to a tag once the v2 line is tagged.
   #
-  # Circularity note: the first v2 build MUST run from a branch, not a tag —
-  # tzf cannot tag v2.0.0 until it can require a published tzf-dist release,
-  # and tzf-dist cannot publish one without tzf's pipeline. Order is:
-  # build from `embedded` -> tag tzf-dist -> tzf drops its go.mod replace and
-  # tags v2.0.0 -> pin TZF_REF here to that tag.
-  TZF_REF: "embedded"
+  # Pinned to the tzf release whose pipeline built the current data line.
+  # The first v2 build (v0.0.2026-c-tzb1) ran from branch `embedded` because
+  # tzf could not tag v2.0.0 before a published tzf-dist release existed.
+  TZF_REF: "v2.0.0"
 
 defaults:
   run:
