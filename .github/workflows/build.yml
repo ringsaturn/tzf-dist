@@ -1,8 +1,12 @@
 name: build-data
 
 on:
-  schedule:
-    - cron: "0 3 * * *"
+  # The nightly rebuild is disabled for the v2 artifact rollout: it force-pushes
+  # the orphan `data` branch, and while the rollout is in flight that branch is
+  # what the first v2 tag is cut from. Re-enable once the v2 artifact set is
+  # tagged, tzf/tzf-rs are pinned to it, and TZF_REF below is pinned to a tag.
+  # schedule:
+  #   - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       force:
@@ -10,11 +14,11 @@ on:
         type: boolean
         default: false
       version_suffix:
-        description: "Optional suffix appended to the TBB version for patch releases (e.g. -fix1). Leave empty for normal builds."
+        description: "Optional suffix appended to the TBB version for patch releases (e.g. -fix1, -tzb1). Must sort AFTER the previous suffix for the same TBB version under semver prerelease rules (ASCII compare: -tzb1 > -fix1). Leave empty for normal builds."
         type: string
         default: ""
       auto_tag:
-        description: "Create a GitHub Release after pushing data branch, which triggers release.yml. Requires GH_TOKEN secret (PAT) — GITHUB_TOKEN cannot trigger other workflows."
+        description: "Tag the pushed data commit and dispatch release.yml for it (workflow_dispatch is exempt from the GITHUB_TOKEN no-retrigger rule, so no PAT is needed)."
         type: boolean
         default: false
 
@@ -22,6 +26,12 @@ env:
   # The tzf ref providing the pipeline CLIs (checked out side by side; tzf's
   # go.mod replaces tzf-dist with this checkout, so the tools embed the data
   # being built). Pin to a tag once the v2 line is tagged.
+  #
+  # Circularity note: the first v2 build MUST run from a branch, not a tag —
+  # tzf cannot tag v2.0.0 until it can require a published tzf-dist release,
+  # and tzf-dist cannot publish one without tzf's pipeline. Order is:
+  # build from `embedded` -> tag tzf-dist -> tzf drops its go.mod replace and
+  # tags v2.0.0 -> pin TZF_REF here to that tag.
   TZF_REF: "embedded"
 
 defaults:
@@ -72,8 +82,23 @@ jobs:
         run: |
           git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
           CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
-          if [ "$DIST_VERSION" = "$CURRENT" ] && [ "${{ inputs.force }}" != "true" ]; then
-            echo "Already up to date: $DIST_VERSION"
+
+          # "Current" means: the data branch already carries this TBB version.
+          # Without a requested suffix, a suffixed build of the same TBB version
+          # (e.g. data branch at "2026c-tzb1") also counts as current — otherwise
+          # every unattended run after a suffixed release would rebuild and
+          # force-push the data branch forever.
+          UP_TO_DATE=false
+          if [ -n "${{ inputs.version_suffix }}" ]; then
+            [ "$DIST_VERSION" = "$CURRENT" ] && UP_TO_DATE=true
+          else
+            case "$CURRENT" in
+              "$TIMEZONE_BOUNDARY_VERSION"|"$TIMEZONE_BOUNDARY_VERSION"-*) UP_TO_DATE=true ;;
+            esac
+          fi
+
+          if [ "$UP_TO_DATE" = "true" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Already up to date: data branch at '$CURRENT', requested '$DIST_VERSION'"
             echo "should_continue=false" >> $GITHUB_OUTPUT
           else
             echo "Update needed: '$CURRENT' -> '$DIST_VERSION' (force=${{ inputs.force }})"
@@ -241,6 +266,10 @@ jobs:
       - name: Create tag and dispatch release workflow
         if: steps.check-update.outputs.should_continue == 'true' && inputs.auto_tag
         env:
+          # Events created by GITHUB_TOKEN do not start new workflow runs,
+          # except workflow_dispatch and repository_dispatch. release.yml is
+          # workflow_dispatch-only, and this job has `actions: write`, so the
+          # dispatch below works with the default token.
           GH_TOKEN: ${{ github.token }}
         run: |
           CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
@@ -248,6 +277,16 @@ jobs:
           CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
           TAG="v${CARGO_VERSION}"
           DATA_SHA=$(git rev-parse HEAD)
+
+          # Tags are immutable for consumers: the Go module proxy and crates.io
+          # both cache a version forever. Fail loudly instead of 422-ing.
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists. The Go module proxy and"
+            echo "::error::crates.io have already served this version and cannot"
+            echo "::error::be overwritten. Re-run with a version_suffix that sorts"
+            echo "::error::after it under semver prerelease rules (e.g. -tzb1)."
+            exit 1
+          fi
 
           gh api repos/${{ github.repository }}/git/refs \
             -f ref="refs/tags/${TAG}" \

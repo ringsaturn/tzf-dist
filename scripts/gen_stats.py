@@ -2,7 +2,8 @@
 """Generate STATS.md from pipeline stderr captures and output file checksums.
 
 Environment variables required:
-  TBB_VERSION   - timezone-boundary-builder version string (e.g. "2026a")
+  DIST_VERSION  - distribution version: TBB version plus optional suffix
+                  (e.g. "2026c", "2026c-tzb1")
   BUILD_DATE    - ISO-8601 UTC build timestamp
 
 Reads stats from /tmp/stats-*.txt written by the CI pipeline steps.

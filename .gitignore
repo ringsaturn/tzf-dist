@@ -1,1 +1,13 @@
+# Retired protobuf-era artifacts (the v1 data line is frozen).
 *.bin
+
+# Local/CI build intermediates. The pipeline runs in this directory and writes
+# the raw GeoJSON plus the gob stages here; only the .tzb/.tzm artifacts and the
+# generated reports belong on the data branch, and those are added explicitly.
+combined-with-oceans.*
+timezones-with-oceans.geojson.zip
+*.gob
+
+# Rust build output (previously only ignored via a global gitignore).
+/target
+.DS_Store
