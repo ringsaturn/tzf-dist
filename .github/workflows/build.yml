@@ -1,12 +1,12 @@
 name: build-data
 
 on:
-  # The nightly rebuild is disabled for the v2 artifact rollout: it force-pushes
-  # the orphan `data` branch, and while the rollout is in flight that branch is
-  # what the first v2 tag is cut from. Re-enable once the v2 artifact set is
-  # tagged, tzf/tzf-rs are pinned to it, and TZF_REF below is pinned to a tag.
-  # schedule:
-  #   - cron: "0 3 * * *"
+  # Nightly rebuild. It force-pushes the orphan `data` branch but never tags:
+  # a run whose TBB version is already covered by the data branch (`<tbb>` or
+  # `<tbb>-*`) exits early, so the branch only moves when upstream ships a new
+  # release. Tags are cut by a manual workflow_dispatch with auto_tag=true.
+  schedule:
+    - cron: "0 3 * * *"
   workflow_dispatch:
     inputs:
       force:
