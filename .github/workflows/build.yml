@@ -138,10 +138,14 @@ jobs:
             2> >(tee /tmp/stats-preindex.txt >&2)
 
           # artifacts
-          go run ./cmd/topo2embed -profile e -preindex "$D".topology.preindex.gob \
+          # -chunk 64: 64-point chunks cut in-place boundary-query latency
+          # ~30% for +5% lite / +11% full file size (tzf chunk-size sweep,
+          # 2026-09-13). Passed explicitly so the artifact does not depend on
+          # the encoder default at TZF_REF.
+          go run ./cmd/topo2embed -profile e -chunk 64 -preindex "$D".topology.preindex.gob \
             -o ../tzf-dist/lite.tzb "$D".topology.compress.topo.gob \
             | tee /tmp/stats-embed-lite.txt
-          go run ./cmd/topo2embed -profile e -preindex "$D".topology.preindex.gob \
+          go run ./cmd/topo2embed -profile e -chunk 64 -preindex "$D".topology.preindex.gob \
             -o ../tzf-dist/full.tzb "$D".compress.topo.gob \
             | tee /tmp/stats-embed-full.txt
           go run ./cmd/tzb2tzm -o ../tzf-dist/lite.tzm ../tzf-dist/lite.tzb \
