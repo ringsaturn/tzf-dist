@@ -1,0 +1,28 @@
+[package]
+name = "tzf-dist"
+# version is updated to "0.0.{year}-{letter}" (e.g. "0.0.2026-a") by the build workflow
+version = "0.0.2026-c-tzb2"
+edition = "2021"
+license = "MIT AND ODbL-1.0"
+description = "Binary timezone data distribution for tzf-rs (TZF embedded-binary .tzb format)"
+homepage = "https://github.com/ringsaturn/tzf-dist"
+documentation = "https://github.com/ringsaturn/tzf-dist"
+repository = "https://github.com/ringsaturn/tzf-dist"
+readme = "README.md"
+# full.tzb (~14 MB) and lite.tzm (~10 MB) are excluded: too large for crates.io
+include = [
+    "src/lib.rs",
+    "Cargo.toml",
+    "README.md",
+    "LICENSE",
+    "LICENSE_DATA",
+    "lite.tzb",
+]
+
+[features]
+# Includes the full-precision .tzb dataset (~14 MB).
+# Only available via git dependency — the file is excluded from the crates.io package.
+# Usage: tzf-dist = { git = "https://github.com/ringsaturn/tzf-dist", tag = "...", features = ["full"], default-features = false}
+full = []
+
+[dependencies]

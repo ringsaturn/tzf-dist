@@ -1,0 +1,303 @@
+name: build-data
+
+on:
+  # Nightly rebuild. It force-pushes the orphan `data` branch but never tags:
+  # a run whose TBB version is already covered by the data branch (`<tbb>` or
+  # `<tbb>-*`) exits early, so the branch only moves when upstream ships a new
+  # release. Tags are cut by a manual workflow_dispatch with auto_tag=true.
+  schedule:
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force rebuild even if data branch is already current"
+        type: boolean
+        default: false
+      version_suffix:
+        description: "Optional suffix appended to the TBB version for patch releases (e.g. -fix1, -tzb1). Must sort AFTER the previous suffix for the same TBB version under semver prerelease rules (ASCII compare: -tzb1 > -fix1). Leave empty for normal builds."
+        type: string
+        default: ""
+      auto_tag:
+        description: "Tag the pushed data commit and dispatch release.yml for it (workflow_dispatch is exempt from the GITHUB_TOKEN no-retrigger rule, so no PAT is needed)."
+        type: boolean
+        default: false
+
+env:
+  # The tzf ref providing the pipeline CLIs, checked out side by side. Since
+  # tzf v2.0.0 its go.mod requires the published tzf-dist module (no replace),
+  # so the pipeline tools do not embed the data being built; the checkout is
+  # only the source of the CLIs and the embedcompare gate.
+  #
+  # Pinned to the tzf revision whose pipeline builds the current data line.
+  # Every tzf minor that changes the encoder ships against a tzf-dist tag that
+  # was itself built with that encoder, so the pin is a commit while the data
+  # is being cut and moves to the tzf tag once it exists:
+  #   v0.0.2026-c-tzb1  <- branch `embedded`, later re-pinned to v2.0.0
+  #   v0.0.2026-c-tzb2  <- f2643cb (topo2embed default chunk 64; tzf v2.1.0)
+  TZF_REF: "f2643cbc328c00cf3c74f3e48dcfc59f4ecea3f7"
+
+defaults:
+  run:
+    working-directory: tzf-dist
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      actions: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: tzf-dist
+          fetch-depth: 0
+
+      - uses: actions/checkout@v4
+        with:
+          repository: ringsaturn/tzf
+          ref: ${{ env.TZF_REF }}
+          path: tzf
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: tzf/go.mod
+
+      - name: Fetch latest timezone-boundary-builder version
+        id: fetch-version
+        run: |
+          VERSION=$(curl -sf "https://api.github.com/repos/evansiroky/timezone-boundary-builder/tags" \
+            | python3 -c "import sys,json; d=json.load(sys.stdin); print(d[0]['name'] if d else '')")
+          if [ -z "$VERSION" ]; then
+            echo "Failed to fetch latest TBB version"
+            exit 1
+          fi
+          DIST_VERSION="${VERSION}${{ inputs.version_suffix }}"
+          echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_OUTPUT
+          echo "TIMEZONE_BOUNDARY_VERSION=$VERSION" >> $GITHUB_ENV
+          echo "DIST_VERSION=$DIST_VERSION" >> $GITHUB_OUTPUT
+          echo "DIST_VERSION=$DIST_VERSION" >> $GITHUB_ENV
+
+      - name: Check if data branch is already current
+        id: check-update
+        run: |
+          git fetch origin refs/heads/data:refs/remotes/origin/data 2>/dev/null || true
+          CURRENT=$(git show origin/data:VERSION 2>/dev/null || echo "")
+
+          # "Current" means: the data branch already carries this TBB version.
+          # Without a requested suffix, a suffixed build of the same TBB version
+          # (e.g. data branch at "2026c-tzb1") also counts as current — otherwise
+          # every unattended run after a suffixed release would rebuild and
+          # force-push the data branch forever.
+          UP_TO_DATE=false
+          if [ -n "${{ inputs.version_suffix }}" ]; then
+            [ "$DIST_VERSION" = "$CURRENT" ] && UP_TO_DATE=true
+          else
+            case "$CURRENT" in
+              "$TIMEZONE_BOUNDARY_VERSION"|"$TIMEZONE_BOUNDARY_VERSION"-*) UP_TO_DATE=true ;;
+            esac
+          fi
+
+          if [ "$UP_TO_DATE" = "true" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "Already up to date: data branch at '$CURRENT', requested '$DIST_VERSION'"
+            echo "should_continue=false" >> $GITHUB_OUTPUT
+          else
+            echo "Update needed: '$CURRENT' -> '$DIST_VERSION' (force=${{ inputs.force }})"
+            echo "should_continue=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Download timezone boundary data
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          wget "https://github.com/evansiroky/timezone-boundary-builder/releases/download/$TIMEZONE_BOUNDARY_VERSION/timezones-with-oceans.geojson.zip"
+          unzip timezones-with-oceans.geojson.zip
+
+      # The v2 pipeline: GeoJSON → gob intermediates (build-internal, never
+      # distributed) → .tzb/.tzm artifacts. No protobuf anywhere.
+      - name: Generate artifacts
+        if: steps.check-update.outputs.should_continue == 'true'
+        working-directory: tzf
+        env:
+          TIMEZONE_BOUNDARY_VERSION: ${{ env.TIMEZONE_BOUNDARY_VERSION }}
+        run: |
+          D=../tzf-dist/combined-with-oceans
+
+          go run ./cmd/geojson2tzpb "$D".json
+
+          # full line: dedup + compress on full precision data
+          go run ./cmd/deduplicatetzpb -o "$D".topo.gob "$D".gob \
+            2> >(tee /tmp/stats-dedup-full.txt >&2)
+          go run ./cmd/compresstopotzpb -o "$D".compress.topo.gob "$D".topo.gob \
+            2> >(tee /tmp/stats-compress-full.txt >&2)
+
+          # lite line: topology-aware simplify + dedup + compress; preindex
+          go run ./cmd/reducetzpb -o "$D".topology.gob "$D".gob \
+            2> >(tee /tmp/stats-reduce-topo.txt >&2)
+          go run ./cmd/deduplicatetzpb -o "$D".topology.topo.gob "$D".topology.gob \
+            2> >(tee /tmp/stats-dedup-topo.txt >&2)
+          go run ./cmd/compresstopotzpb -o "$D".topology.compress.topo.gob "$D".topology.topo.gob \
+            2> >(tee /tmp/stats-compress-topo.txt >&2)
+          go run ./cmd/preindextzpb "$D".topology.gob \
+            2> >(tee /tmp/stats-preindex.txt >&2)
+
+          # artifacts
+          # -chunk 64: 64-point chunks cut in-place boundary-query latency
+          # ~30% for +5% lite / +11% full file size (tzf chunk-size sweep,
+          # 2026-09-13). Passed explicitly so the artifact does not depend on
+          # the encoder default at TZF_REF.
+          go run ./cmd/topo2embed -profile e -chunk 64 -preindex "$D".topology.preindex.gob \
+            -o ../tzf-dist/lite.tzb "$D".topology.compress.topo.gob \
+            | tee /tmp/stats-embed-lite.txt
+          go run ./cmd/topo2embed -profile e -chunk 64 -preindex "$D".topology.preindex.gob \
+            -o ../tzf-dist/full.tzb "$D".compress.topo.gob \
+            | tee /tmp/stats-embed-full.txt
+          go run ./cmd/tzb2tzm -o ../tzf-dist/lite.tzm ../tzf-dist/lite.tzb \
+            | tee /tmp/stats-tzm.txt
+
+      - name: Verify (deep E+M + dense + boundary parity)
+        if: steps.check-update.outputs.should_continue == 'true'
+        working-directory: tzf
+        run: |
+          go run ./internal/cmd/embedcompare \
+            -preindex ../tzf-dist/combined-with-oceans.topology.preindex.gob \
+            -tzm ../tzf-dist/lite.tzm \
+            ../tzf-dist/combined-with-oceans.topology.compress.topo.gob \
+            ../tzf-dist/lite.tzb
+          go run ./internal/cmd/embedcompare -deep-only \
+            ../tzf-dist/combined-with-oceans.compress.topo.gob \
+            ../tzf-dist/full.tzb
+
+      - name: Test embeds (alignment + presence)
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: go test ./...
+
+      - name: Measure border changes
+        if: steps.check-update.outputs.should_continue == 'true'
+        working-directory: tzf
+        run: |
+          go run ./internal/cmd/borderchange \
+            -certification-tolerance-m 0.5 \
+            -top-pairs 20 \
+            ../tzf-dist/combined-with-oceans.json \
+            ../tzf-dist/combined-with-oceans.topology.compress.topo.gob \
+            > ../tzf-dist/BORDER_CHANGE.md
+
+      - name: Collect statistics and checksums
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          export BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+          md5sum lite.tzb lite.tzm full.tzb > checksums.md5
+          cat checksums.md5
+
+          python3 scripts/gen_stats.py
+
+      - name: Upload artifacts
+        if: steps.check-update.outputs.should_continue == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tzf-data-${{ steps.fetch-version.outputs.DIST_VERSION }}
+          path: |
+            tzf-dist/lite.tzb
+            tzf-dist/lite.tzm
+            tzf-dist/full.tzb
+            tzf-dist/checksums.md5
+            tzf-dist/STATS.md
+            tzf-dist/BORDER_CHANGE.md
+
+      - name: Set up Rust
+        if: steps.check-update.outputs.should_continue == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Push data branch (orphan, no history)
+        if: steps.check-update.outputs.should_continue == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # Save tracked source files before switching to orphan branch
+          cp embed.go /tmp/tzf-dist-embed.go
+          cp embed_test.go /tmp/tzf-dist-embed_test.go
+          cp go.mod /tmp/tzf-dist-go.mod
+          cp .gitattributes /tmp/tzf-dist-gitattributes
+          cp LICENSE /tmp/tzf-dist-LICENSE
+          cp LICENSE_DATA /tmp/tzf-dist-LICENSE_DATA
+          cp README.md /tmp/tzf-dist-README.md
+          cp Cargo.toml /tmp/tzf-dist-Cargo.toml
+          cp Cargo.lock /tmp/tzf-dist-Cargo.lock
+          cp -r src /tmp/tzf-dist-src
+          cp -r .github /tmp/tzf-dist-github
+
+          # Create orphan branch; remove tracked files from index only so generated
+          # binaries on disk are preserved for the subsequent git add steps
+          git checkout --orphan data-new
+          git rm --cached -rf .
+          rm -f .gitignore
+
+          # Restore source files
+          cp /tmp/tzf-dist-embed.go embed.go
+          cp /tmp/tzf-dist-embed_test.go embed_test.go
+          cp /tmp/tzf-dist-go.mod go.mod
+          cp /tmp/tzf-dist-gitattributes .gitattributes
+          cp /tmp/tzf-dist-LICENSE LICENSE
+          cp /tmp/tzf-dist-LICENSE_DATA LICENSE_DATA
+          cp /tmp/tzf-dist-README.md README.md
+          cp /tmp/tzf-dist-Cargo.toml Cargo.toml
+          cp /tmp/tzf-dist-Cargo.lock Cargo.lock
+          rm -rf src && cp -r /tmp/tzf-dist-src src
+          rm -rf .github && cp -r /tmp/tzf-dist-github .github
+
+          # Update Cargo.toml version: "2026a" + optional suffix -> "0.0.2026-a[-suffix]"
+          CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
+          CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
+          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
+          sed -i "s/^version = \"0.0.0\"/version = \"$CARGO_VERSION\"/" Cargo.toml
+          cargo generate-lockfile
+
+          echo "$DIST_VERSION" > VERSION
+
+          git add embed.go embed_test.go go.mod .gitattributes VERSION
+          git add Cargo.toml Cargo.lock src/
+          git add .github/
+          git add lite.tzb lite.tzm full.tzb
+          git add STATS.md BORDER_CHANGE.md checksums.md5
+          git add LICENSE LICENSE_DATA README.md
+
+          git commit -m "data: $DIST_VERSION"
+
+          # Force push as data branch (no history retained; historical data via tags)
+          git push origin HEAD:data --force
+
+      - name: Create tag and dispatch release workflow
+        if: steps.check-update.outputs.should_continue == 'true' && inputs.auto_tag
+        env:
+          # Events created by GITHUB_TOKEN do not start new workflow runs,
+          # except workflow_dispatch and repository_dispatch. release.yml is
+          # workflow_dispatch-only, and this job has `actions: write`, so the
+          # dispatch below works with the default token.
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CARGO_YEAR=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d 'a-z')
+          CARGO_LETTER=$(echo "$TIMEZONE_BOUNDARY_VERSION" | tr -d '0-9')
+          CARGO_VERSION="0.0.${CARGO_YEAR}-${CARGO_LETTER}${{ inputs.version_suffix }}"
+          TAG="v${CARGO_VERSION}"
+          DATA_SHA=$(git rev-parse HEAD)
+
+          # Tags are immutable for consumers: the Go module proxy and crates.io
+          # both cache a version forever. Fail loudly instead of 422-ing.
+          if git ls-remote --exit-code --tags origin "refs/tags/${TAG}" >/dev/null 2>&1; then
+            echo "::error::Tag ${TAG} already exists. The Go module proxy and"
+            echo "::error::crates.io have already served this version and cannot"
+            echo "::error::be overwritten. Re-run with a version_suffix that sorts"
+            echo "::error::after it under semver prerelease rules (e.g. -tzb1)."
+            exit 1
+          fi
+
+          gh api repos/${{ github.repository }}/git/refs \
+            -f ref="refs/tags/${TAG}" \
+            -f sha="${DATA_SHA}"
+
+          gh workflow run release.yml \
+            --ref data \
+            --field tag="${TAG}"
