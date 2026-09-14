@@ -23,14 +23,18 @@ on:
         default: false
 
 env:
-  # The tzf ref providing the pipeline CLIs (checked out side by side; tzf's
-  # go.mod replaces tzf-dist with this checkout, so the tools embed the data
-  # being built). Pin to a tag once the v2 line is tagged.
+  # The tzf ref providing the pipeline CLIs, checked out side by side. Since
+  # tzf v2.0.0 its go.mod requires the published tzf-dist module (no replace),
+  # so the pipeline tools do not embed the data being built; the checkout is
+  # only the source of the CLIs and the embedcompare gate.
   #
-  # Pinned to the tzf release whose pipeline built the current data line.
-  # The first v2 build (v0.0.2026-c-tzb1) ran from branch `embedded` because
-  # tzf could not tag v2.0.0 before a published tzf-dist release existed.
-  TZF_REF: "v2.0.0"
+  # Pinned to the tzf revision whose pipeline builds the current data line.
+  # Every tzf minor that changes the encoder ships against a tzf-dist tag that
+  # was itself built with that encoder, so the pin is a commit while the data
+  # is being cut and moves to the tzf tag once it exists:
+  #   v0.0.2026-c-tzb1  <- branch `embedded`, later re-pinned to v2.0.0
+  #   v0.0.2026-c-tzb2  <- f2643cb (topo2embed default chunk 64; tzf v2.1.0)
+  TZF_REF: "f2643cbc328c00cf3c74f3e48dcfc59f4ecea3f7"
 
 defaults:
   run:
