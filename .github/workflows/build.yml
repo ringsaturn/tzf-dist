@@ -33,8 +33,8 @@ env:
   # was itself built with that encoder, so the pin is a commit while the data
   # is being cut and moves to the tzf tag once it exists:
   #   v0.0.2026-c-tzb1  <- branch `embedded`, later re-pinned to v2.0.0
-  #   v0.0.2026-c-tzb2  <- f2643cb (topo2embed default chunk 64; tzf v2.1.0)
-  TZF_REF: "f2643cbc328c00cf3c74f3e48dcfc59f4ecea3f7"
+  #   v0.0.2026-c-tzb2  <- f2643cb (topo2embed default chunk 64), then v2.1.0
+  TZF_REF: "v2.1.0"
 
 defaults:
   run:
