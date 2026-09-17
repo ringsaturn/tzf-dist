@@ -37,7 +37,7 @@ env:
   #   v0.0.2026-d       <- 88d9e93 (reducetzpb hole-escape fallback for the
   #                        new 2026d Asia/Hong_Kong polygon; v2.1.1 fails
   #                        the embedcompare gate on it)
-  TZF_REF: "88d9e93"
+  TZF_REF: "88d9e939f5b4c627465c9957c8d592015786079f"
 
 defaults:
   run:
