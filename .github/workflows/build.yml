@@ -34,10 +34,10 @@ env:
   # is being cut and moves to the tzf tag once it exists:
   #   v0.0.2026-c-tzb1  <- branch `embedded`, later re-pinned to v2.0.0
   #   v0.0.2026-c-tzb2  <- f2643cb (topo2embed default chunk 64), then v2.1.1
-  #   v0.0.2026-d       <- 88d9e93 (reducetzpb hole-escape fallback for the
-  #                        new 2026d Asia/Hong_Kong polygon; v2.1.1 fails
-  #                        the embedcompare gate on it)
-  TZF_REF: "88d9e939f5b4c627465c9957c8d592015786079f"
+  #   v0.0.2026-d       <- 5ebc9fc (reducetzpb hole-escape fallback for the
+  #                        new 2026d Asia/Hong_Kong polygon and borderchange
+  #                        pinched-ring fix; v2.1.1 fails the gate on it)
+  TZF_REF: "5ebc9fc79610daa8acbaff1d41edebcf35cd1b3f"
 
 defaults:
   run:
