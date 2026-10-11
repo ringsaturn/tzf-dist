@@ -37,6 +37,9 @@ env:
   #   v0.0.2026-d       <- 5ebc9fc (reducetzpb hole-escape fallback for the
   #                        new 2026d Asia/Hong_Kong polygon and borderchange
   #                        pinched-ring fix; v2.1.1 fails the gate on it)
+  #   v0.0.2026-d-fix1  <- 2a8b432 (shared-border transition pinning)
+  #   v0.0.2026-e       <- 2a8b432, unchanged pipeline (tzf main had no
+  #                        encoder changes after it as of 2026-10-11)
   #
   # 2026-09-23, pinned to tzf revision 2a8b432dba4f756aec25fa596d0a588917912901
   #             fix shared-border transitions.
