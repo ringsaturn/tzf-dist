@@ -1,0 +1,99 @@
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v0.0.2026-a)"
+        required: true
+        type: string
+      dry_run:
+        description: "Validate only: no GitHub release assets, `cargo publish --dry-run` instead of publishing. Nothing here is reversible once real, so prefer a dry run first."
+        type: boolean
+        default: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    environment:
+      name: publish
+      url: https://crates.io/crates/tzf-dist
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.tag }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      # Everything below the publish is irreversible, so validate first.
+      - name: Verify tag matches Cargo version
+        shell: bash
+        run: |
+          tag_version="${{ inputs.tag }}"
+          tag_version="${tag_version#v}"
+          cargo_version="$(cargo pkgid | sed -E 's/.*#//')"
+
+          if [ "${tag_version}" != "${cargo_version}" ]; then
+            echo "Tag version ${tag_version} does not match Cargo.toml version ${cargo_version}."
+            exit 1
+          fi
+
+      - name: Verify artifacts and crate package
+        shell: bash
+        run: |
+          test -s lite.tzb && test -s lite.tzm && test -s full.tzb
+          md5sum -c checksums.md5
+
+          # crates.io rejects packages over 10 MiB; the crate carries lite.tzb
+          # only (full.tzb / lite.tzm are git-only, see Cargo.toml `include`).
+          cargo package --list
+          cargo package --locked
+          crate=$(ls target/package/*.crate)
+          size=$(stat -c%s "$crate")
+          echo "packaged $crate: $size bytes"
+          if [ "$size" -gt $((10 * 1024 * 1024)) ]; then
+            echo "::error::crate is ${size} bytes, over the crates.io 10 MiB limit"
+            exit 1
+          fi
+          if tar -tzf "$crate" | grep -qE 'full\.tzb|lite\.tzm'; then
+            echo "::error::crate contains a git-only artifact; check Cargo.toml include"
+            exit 1
+          fi
+
+      - name: Compose release notes
+        run: |
+          {
+            cat STATS.md
+            printf '\n'
+            cat BORDER_CHANGE.md
+          } > RELEASE_NOTES.md
+
+      - name: Upload release assets
+        if: ${{ !inputs.dry_run }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            lite.tzb
+            lite.tzm
+            full.tzb
+            checksums.md5
+
+      - name: Authenticate with crates.io
+        id: auth
+        if: ${{ !inputs.dry_run }}
+        uses: rust-lang/crates-io-auth-action@v1
+
+      - name: Publish crate
+        if: ${{ !inputs.dry_run }}
+        run: cargo publish --locked
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+      - name: Publish crate (dry run)
+        if: ${{ inputs.dry_run }}
+        run: cargo publish --locked --dry-run
